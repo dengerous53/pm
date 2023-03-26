@@ -12,9 +12,9 @@ def is_enabled(value, default):
 
 # Bot information
 SESSION = environ.get('SESSION', 'Media_search')
-API_ID = int(environ.get('API_ID', '3369707'))
-API_HASH = environ.get('API_HASH', 'aec1fd7abdfec322c426961a570ef336')
-BOT_TOKEN = environ.get('BOT_TOKEN', "1755036029:AAEuOyIOK3Hs4-RxnCWkqE5erWOoVquiZDc")
+API_ID = int(environ.get('API_ID', '10261086'))
+API_HASH = environ.get('API_HASH', '9195dc0591fbdb22b5711bcd1f437dab')
+BOT_TOKEN = environ.get('BOT_TOKEN', "5506433341:AAHX8SjshBsSodIBi0YsugeFacEEnRMCCM8")
 
 # Bot settings
 CACHE_TIME = int(environ.get('CACHE_TIME', 300))
@@ -22,22 +22,22 @@ USE_CAPTION_FILTER = bool(environ.get('USE_CAPTION_FILTER', False))
 PICS = (environ.get('PICS', 'https://telegra.ph/file/3f2ff459b9d316133d1c8.jpg')).split()
 
 # Admins, Channels & Users
-ADMINS = [int(admin) if id_pattern.search(admin) else admin for admin in environ.get('ADMINS', '1115053159 1785368472 1119115151').split()]
-CHANNELS = [int(ch) if id_pattern.search(ch) else ch for ch in environ.get('CHANNELS', '-1001446583785 -1001582302762 -1001188785497 -1001368488500 -1001589244933 -1001608509389').split()]
-auth_users = [int(user) if id_pattern.search(user) else user for user in environ.get('AUTH_USERS', '1115053159 1119115151 1785368472').split()]
+ADMINS = [int(admin) if id_pattern.search(admin) else admin for admin in environ.get('ADMINS', '1426588906').split()]
+CHANNELS = [int(ch) if id_pattern.search(ch) else ch for ch in environ.get('CHANNELS', '-1001878854070').split()]
+auth_users = [int(user) if id_pattern.search(user) else user for user in environ.get('AUTH_USERS', '').split()]
 AUTH_USERS = (auth_users + ADMINS) if auth_users else []
-auth_channel = environ.get('AUTH_CHANNEL', '-1001446583785 -1001582302762 -1001188785497 -1001368488500 -1001589244933 -1001608509389')
+auth_channel = environ.get('AUTH_CHANNEL', '')
 auth_grp = environ.get('AUTH_GROUP')
 AUTH_CHANNEL = int(auth_channel) if auth_channel and id_pattern.search(auth_channel) else None
 AUTH_GROUPS = [int(ch) for ch in auth_grp.split()] if auth_grp else None
 
 # MongoDB information
-DATABASE_URI = environ.get('DATABASE_URI', "mongodb+srv://phoenix:phoenix061@cluster0.y46vf.mongodb.net/myFirstDatabase?retryWrites=true&w=majority")
-DATABASE_NAME = environ.get('DATABASE_NAME', "AMD_LinkZz")
+DATABASE_URI = environ.get('DATABASE_URI', "mongodb+srv://hulk1:hulk1@cluster0.3xtp3aq.mongodb.net/?retryWrites=true&w=majority")
+DATABASE_NAME = environ.get('DATABASE_NAME', "hulk1")
 COLLECTION_NAME = environ.get('COLLECTION_NAME', 'Telegram_files')
 
 # Others
-LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-1001521206814'))
+LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-1001606248152'))
 SUPPORT_CHAT = environ.get('SUPPORT_CHAT', 'AMD_Discussion')
 P_TTI_SHOW_OFF = is_enabled((environ.get('P_TTI_SHOW_OFF', "True")), True)
 IMDB = is_enabled((environ.get('IMDB', "False")), False)
